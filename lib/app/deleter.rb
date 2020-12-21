@@ -1,4 +1,4 @@
-require "gcal/recurring/event/deleter/version"
+require 'gcal/version'
 
 module Gcal
   module Recurring

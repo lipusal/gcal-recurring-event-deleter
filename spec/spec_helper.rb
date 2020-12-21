@@ -1,5 +1,5 @@
 require "bundler/setup"
-require "gcal/recurring/event/deleter"
+require "gcal/app"
 
 RSpec.configure do |config|
   # Enable flags like --only-failures and --next-failure

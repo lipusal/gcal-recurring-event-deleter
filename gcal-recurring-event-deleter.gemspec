@@ -1,4 +1,4 @@
-require_relative 'lib/gcal/recurring/event/deleter/version'
+require_relative 'lib/app/version'
 
 Gem::Specification.new do |spec|
   spec.name          = "gcal-recurring-event-deleter"
