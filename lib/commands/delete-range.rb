@@ -1,7 +1,6 @@
 require 'google/apis/calendar_v3'
 require_relative '../base_cli'
 
-
 module Commands
   class DeleteRange < BaseCli
     Calendar = Google::Apis::CalendarV3
@@ -28,42 +27,116 @@ module Commands
       available_calendars = calendar.list_calendar_lists
       say "Available calendars:"
       available_calendars.items.each_with_index do |item, index|
-        say "#{index+1} - #{ format_calendar item }"
+        say "#{index + 1} - #{ format_calendar item }"
       end
       options = (1..available_calendars.items.length).map(&:to_s)
       selected_index = ask('Select a calendar', limited_to: options).to_i
 
-      result = available_calendars.items[selected_index-1]
+      result = available_calendars.items[selected_index - 1]
       say "Selected #{result.summary} (#{result.id})"
       result
     end
 
-    desc 'list_events', 'List upcoming recurring events in the specified calendar'
-    method_option :calendar_id, type: :string, required: true
-    def list_events
+    desc 'list_events CALENDAR_ID', 'List events in the calendar CALENDAR_ID'
+    method_option :from, type: :string, default: DateTime.now.iso8601, desc: 'Date time from which to list events, in ISO-8601 format.'
+    method_option :to, type: :string, default: DateTime.now.next_month.iso8601, desc: 'Date time up to which to list events, in ISO-8601 format.'
+    def list_events(calendar_id = 'primary')
       calendar = Calendar::CalendarService.new
       calendar.authorization = user_credentials_for(Calendar::AUTH_CALENDAR_EVENTS_READONLY)
 
       page_token = nil
-      now = Time.now.iso8601
-      begin
-        result = calendar.list_events(options[:calendar_id],
-                                      single_events: false,
-                                      order_by: 'startTime',
-                                      time_min: now,
-                                      page_token: page_token,
-                                      fields: 'items(id,summary,start),next_page_token')
+      from = DateTime.parse options[:from]
+      to = DateTime.parse options[:to]
+      loop do
+        page = calendar.list_events(calendar_id,
+                                    single_events: true,
+                                    order_by: 'startTime',
+                                    time_min: from,
+                                    time_max: to,
+                                    page_token: page_token,
+                                    fields: 'items(id,summary,start,recurrence),next_page_token')
 
-        result.items.each do |event|
-          time = event.start.date_time || event.start.date
+        page.items.each do |event|
+          event_start = event.start
+          if event_start.nil?
+            say "Event #{event.id} has no start information, skipping"
+            next
+          end
+          time = event_start.date_time || event_start.date
           say "#{time}, #{event.summary}"
         end
-        page_token = if result.next_page_token
-          result.next_page_token
-        else
-          nil
-        end
-      end while !page_token.nil?
+
+        page_token = page.next_page_token
+        break if page_token.nil?
+      end
+    end
+
+    desc 'list_recurring_events CALENDAR_ID', 'List recurring events in the calendar CALENDAR_ID'
+    method_option :from, type: :string, default: DateTime.now.iso8601, desc: 'Date time from which to list events, in ISO-8601 format.'
+    method_option :to, type: :string, default: DateTime.now.next_month.iso8601, desc: 'Date time up to which to list events, in ISO-8601 format.'
+
+    def list_recurring_events(calendar_id = 'primary')
+      calendar = Calendar::CalendarService.new
+      calendar.authorization = user_credentials_for(Calendar::AUTH_CALENDAR_EVENTS_READONLY)
+
+      page_token = nil
+      from = DateTime.parse options[:from]
+      to = DateTime.parse options[:to]
+
+      result = []
+
+      loop do
+        page = calendar.list_events(calendar_id,
+                                    single_events: false,
+                                    time_min: from,
+                                    time_max: to,
+                                    page_token: page_token,
+                                    fields: 'items(id,summary,start,recurrence),next_page_token')
+
+        base_recurring_events = page.items.reject { |e| e.recurrence.nil? }
+        result.concat base_recurring_events
+
+        page_token = page.next_page_token
+        break if page_token.nil?
+      end
+
+      result.each_with_index do |event, i|
+        start = event.start.date_time || event.start.date
+        say "#{i + 1} - #{event.id} #{start}, #{event.summary}"
+      end
+    end
+
+    desc 'list_recurring_event_instances CALENDAR_ID RECURRING_EVENT_ID', 'List instances of recurring event RECURRING_EVENT_ID in the calendar CALENDAR_ID'
+    method_option :from, type: :string, default: DateTime.now.iso8601, desc: 'Date time from which to list events, in ISO-8601 format.'
+    method_option :to, type: :string, default: DateTime.now.next_month.iso8601, desc: 'Date time up to which to list events, in ISO-8601 format.'
+    def list_recurring_event_instances(calendar_id = 'primary', recurring_event_id)
+      calendar = Calendar::CalendarService.new
+      calendar.authorization = user_credentials_for(Calendar::AUTH_CALENDAR_EVENTS_READONLY)
+
+      page_token = nil
+      from = DateTime.parse options[:from]
+      to = DateTime.parse options[:to]
+
+      result = []
+
+      loop do
+        page = calendar.list_event_instances(calendar_id,
+                                             recurring_event_id,
+                                             time_min: from,
+                                             time_max: to,
+                                             page_token: page_token,
+                                             fields: 'items(id,summary,start),next_page_token')
+
+        result.concat page.items
+
+        page_token = page.next_page_token
+        break if page_token.nil?
+      end
+
+      result.each_with_index do |event, i|
+        start = event.start.date_time || event.start.date
+        say "#{i + 1} - #{event.id} #{start}, #{event.summary}"
+      end
     end
 
     private
