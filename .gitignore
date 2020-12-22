@@ -14,3 +14,8 @@
 .idea
 *.iml
 *.ipr
+
+### Sensitive files
+client_secrets.json
+credentials.yaml
+.env
