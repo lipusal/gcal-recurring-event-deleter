@@ -20,6 +20,24 @@ module Commands
       # say "Created event '#{event.summary}' (#{event.id})"
     end
 
+    desc 'select_calendar', 'Select a calendar from the list of available calendars'
+    def select_calendar
+      calendar = Calendar::CalendarService.new
+      calendar.authorization = user_credentials_for(Calendar::AUTH_CALENDAR_READONLY)
+
+      available_calendars = calendar.list_calendar_lists
+      say "Available calendars:"
+      available_calendars.items.each_with_index do |item, index|
+        say "#{index+1} - #{ format_calendar item }"
+      end
+      options = (1..available_calendars.items.length).map(&:to_s)
+      selected_index = ask('Select a calendar', limited_to: options).to_i
+
+      result = available_calendars.items[selected_index-1]
+      say "Selected #{result.summary} (#{result.id})"
+      result
+    end
+
     desc 'list_events', 'List upcoming recurring events in the specified calendar'
     method_option :calendar_id, type: :string, required: true
     method_option :limit, type: :numeric, default: 50
