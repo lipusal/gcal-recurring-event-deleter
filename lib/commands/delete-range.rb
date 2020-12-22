@@ -139,13 +139,15 @@ module Commands
       end
     end
 
-    private
+    no_commands do
+      private
 
-    def format_calendar(calendar)
-      result = calendar.summary
-      result += ' (primary)' if calendar.primary?
+      def format_calendar(calendar)
+        result = calendar.summary
+        result += ' (primary)' if calendar.primary?
 
-      result
+        result
+      end
     end
   end
 end
