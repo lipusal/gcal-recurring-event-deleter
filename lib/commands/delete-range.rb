@@ -139,6 +139,52 @@ module Commands
       end
     end
 
+    desc 'delete RECURRING_EVENT_ID, CALENDAR_ID, FROM, TO', 'Delete all instances of recurring event RECURRING_EVENT_ID in the calendar CALENDAR_ID between FROM and TO'
+    def delete(recurring_event_id, calendar_id = 'primary', from = DateTime.now.iso8601, to = DateTime.now.next_month.iso8601)
+      calendar = Calendar::CalendarService.new
+      calendar.authorization = user_credentials_for(Calendar::AUTH_CALENDAR_EVENTS)
+
+      page_token = nil
+      from = DateTime.parse from
+      to = DateTime.parse to
+
+      instances = []
+
+      loop do
+        page = calendar.list_event_instances(calendar_id,
+                                             recurring_event_id,
+                                             time_min: from,
+                                             time_max: to,
+                                             page_token: page_token,
+                                             fields: 'items(id,summary,start),next_page_token')
+
+        instances.concat page.items
+
+        page_token = page.next_page_token
+        break if page_token.nil?
+      end
+
+      if instances.empty?
+        say "No instances found between #{from.iso8601} and #{to.iso8601}"
+        return
+      end
+
+      num_instances = instances.length
+      say "About to delete all of the following #{num_instances} instances:\n" + instances.map {|i| format_event i}.join("\n")
+      confirm = yes? 'Confirm?'
+      unless confirm
+        say 'Aborting'
+        return
+      end
+
+      instances.each_with_index do |instance, i|
+        say "Deleting #{i+1}/#{num_instances}..."
+        calendar.delete_event(calendar_id, instance.id)
+      end
+
+      say 'DONE'
+    end
+
     no_commands do
       private
 
@@ -147,6 +193,11 @@ module Commands
         result += ' (primary)' if calendar.primary?
 
         result
+      end
+
+      def format_event(event)
+        start = event.start.date_time || event.start.date
+        "#{start}, #{event.summary}"
       end
     end
   end
