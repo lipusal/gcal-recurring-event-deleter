@@ -190,6 +190,8 @@ module Commands
 
     desc 'decline_range CALENDAR_ID, FROM, TO', 'Decline all events in the calendar CALENDAR_ID between FROM and TO.'
     method_option :reason, :aliases => "-r", :desc => "Reason for declining. Will be added to response in every declined event."
+    # TODO convert send updates into a boolean switch
+    # TODO add a switch for deleting events after declining
     def decline_range(calendar_id = 'primary', from = DateTime.now.iso8601, to = DateTime.now + 7.iso8601)
       calendar = Calendar::CalendarService.new
       credentials = user_credentials_for([Calendar::AUTH_CALENDAR_EVENTS, OAuth2::AUTH_USERINFO_EMAIL])
