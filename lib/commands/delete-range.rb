@@ -1,9 +1,12 @@
 require 'google/apis/calendar_v3'
+require 'google/apis/oauth2_v2'
 require_relative '../base_cli'
 
 module Commands
   class DeleteRange < BaseCli
     Calendar = Google::Apis::CalendarV3
+    OAuth2 = ::Google::Apis::Oauth2V2
+    OAuth2Service = OAuth2::Oauth2Service.new
 
     desc 'list_calendars', 'List all calendars'
     def list_calendars
@@ -180,6 +183,73 @@ module Commands
       instances.each_with_index do |instance, i|
         say "Deleting #{i+1}/#{num_instances}..."
         calendar.delete_event(calendar_id, instance.id)
+      end
+
+      say 'DONE'
+    end
+
+    desc 'decline_range CALENDAR_ID, FROM, TO', 'Decline all events in the calendar CALENDAR_ID between FROM and TO.'
+    method_option :reason, :aliases => "-r", :desc => "Reason for declining. Will be added to response in every declined event."
+    def decline_range(calendar_id = 'primary', from = DateTime.now.iso8601, to = DateTime.now + 7.iso8601)
+      calendar = Calendar::CalendarService.new
+      credentials = user_credentials_for([Calendar::AUTH_CALENDAR_EVENTS, OAuth2::AUTH_USERINFO_EMAIL])
+      calendar.authorization = credentials
+
+      reason = options[:reason]
+
+      page_token = nil
+      from = DateTime.parse from
+      to = DateTime.parse to
+
+      events = []
+
+      loop do
+        page = calendar.list_events(calendar_id,
+                                    time_min: from,
+                                    time_max: to,
+                                    single_events: true,
+                                    page_token: page_token,
+                                    order_by: 'startTime'
+        )
+
+        events.concat page.items
+
+        page_token = page.next_page_token
+        break if page_token.nil?
+      end
+
+      if events.empty?
+        say "No events found between #{from.iso8601} and #{to.iso8601}"
+        return
+      end
+
+      current_user_email = OAuth2Service.tokeninfo(access_token: credentials.access_token).email
+      say "Current user email is #{current_user_email}"
+
+      num_events = events.length
+      say "About to decline all of the following #{num_events} events with reason #{reason}:\n" + events.map {|i| format_event i}.join("\n")
+      confirm = yes? 'Confirm?'
+      unless confirm
+        say 'Aborting'
+        return
+      end
+
+      # no? only returns true on n or no. That's the only case where we want not to send updates
+      send_updates = !no?("Send email for declined events? [Yn]")
+      say "Ok, will #{send_updates ? '' : 'NOT'} send updates for declined events"
+
+      events.each_with_index do |event, i|
+        say "Declining #{event.summary} (#{i+1}/#{num_events})..."
+
+        current_user_attendee = event.attendees.find { |a| a.email === current_user_email}
+        current_user_attendee.response_status = 'declined'
+        current_user_attendee.comment = reason if reason
+
+        calendar.update_event(calendar_id,
+                              event.id,
+                              event,
+                              send_updates: send_updates ? 'all' : 'none'
+        )
       end
 
       say 'DONE'
