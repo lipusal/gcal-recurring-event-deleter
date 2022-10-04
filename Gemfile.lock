@@ -69,6 +69,7 @@ GEM
     uber (0.1.0)
 
 PLATFORMS
+  ruby
   x64-mingw32
 
 DEPENDENCIES
